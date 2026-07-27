@@ -63,7 +63,7 @@ function AuthScreen(){
   return <div className="auth-wrap">
     <div className="auth-visual">
       <div className="auth-orb orb-one"/><div className="auth-orb orb-two"/><div className="auth-grid"/>
-      <div className="auth-copy"><div className="auth-logo">SC</div><h1>성과와 성장의 과정을<br/><em>한곳에서 관리하세요.</em></h1><p>목표, 면담, 팀원 정보를 쉽고 직관적으로 연결합니다.</p></div>
+      <div className="auth-copy"><div className="auth-logo">SC</div><h1>직원 성장의 과정을<br/><em>한곳에서 관리하세요.</em></h1><p>목표, 면담, 팀원 정보를 쉽고 직관적으로 연결합니다.</p></div>
       <small className="auth-copyright">© 2026 Performance Management System</small>
     </div>
     <div className="auth-form-side"><form className="auth-card" onSubmit={submit}>
