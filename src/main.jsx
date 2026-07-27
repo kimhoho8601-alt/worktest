@@ -67,7 +67,7 @@ function AuthScreen(){
       <small className="auth-copyright">© 2026 Performance Management System</small>
     </div>
     <div className="auth-form-side"><form className="auth-card" onSubmit={submit}>
-      <div className="auth-card-head"><span className="eyebrow">TEAM LEADER WORKSPACE</span><h2>{mode==='login'?'로그인':'팀장 계정 가입'}</h2><p>{mode==='login'?'관리자 또는 팀장 계정으로 접속하세요.':'업무용 이메일로 가입 후 관리자 승인을 받아주세요.'}</p></div>
+      <div className="auth-card-head"><span className="eyebrow">SCK TEAM LEADER WORKSPACE</span><h2>{mode==='login'?'로그인':'팀장 계정 가입'}</h2><p>{mode==='login'?'관리자 또는 팀장 계정으로 접속하세요.':'업무용 이메일로 가입 후 관리자 승인을 받아주세요.'}</p></div>
       {mode==='signup'&&<label>이름<input required value={name} onChange={e=>setName(e.target.value)} placeholder="홍길동"/></label>}
       <label>이메일<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.org"/></label>
       <label>비밀번호<div className="password-field"><input required minLength="6" type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="6자 이상"/><button type="button" onClick={()=>setShowPassword(!showPassword)}>{showPassword?<EyeOff size={17}/>:<Eye size={17}/>}</button></div></label>
