@@ -34,7 +34,7 @@ function App(){
   const canManage = ['manager','admin'].includes(profile.role)
   return <div className="app-shell">
     <aside className={`sidebar ${mobile?'open':''}`}>
-      <div className="brand"><span className="brand-mark">S</span><div><strong>성과·면담</strong><small>관리 시스템 V4.1</small></div></div>
+      <div className="brand"><span className="brand-mark">S</span><div><strong>성과·면담</strong><small>관리 시스템</small></div></div>
       <nav>{MENU.filter(([k])=>k!=='employees'||canManage).map(([k,l,I])=><button key={k} className={page===k?'active':''} onClick={()=>{setPage(k);setMobile(false)}}><I size={19}/><span>{l}</span></button>)}</nav>
       <div className="sidebar-user"><div className="avatar">{(profile.name||profile.email||'?')[0]}</div><div><strong>{profile.name||'사용자'}</strong><small>{roleLabel[profile.role]}</small></div><button className="icon-btn" onClick={()=>supabase.auth.signOut()} title="로그아웃"><LogOut size={18}/></button></div>
     </aside>
