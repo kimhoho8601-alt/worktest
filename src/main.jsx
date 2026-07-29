@@ -114,14 +114,14 @@ function AuthScreen(){
       <small className="auth-copyright">© 2026 Performance Management System</small>
     </div>
     <div className="auth-form-side"><form className="auth-card" onSubmit={submit}>
-      <div className="auth-card-head"><span className="eyebrow">TEAM LEADER WORKSPACE</span><h2>{mode==='login'?'로그인':'팀장 계정 가입'}</h2><p>{mode==='login'?'관리자 또는 팀장 계정으로 접속하세요.':'업무용 이메일로 가입 요청을 보내면 관리자가 확인 후 승인합니다.'}</p></div>
+      <div className="auth-card-head"><span className="eyebrow">SCK TEAM LEADER WORKSPACE</span><h2>{mode==='login'?'로그인':'팀장 계정 가입'}</h2><p>{mode==='login'?'이메일 계정으로 로그인하세요!':'업무용 이메일로 가입 요청을 보내면 관리자가 확인 후 승인합니다.'}</p></div>
       {mode==='signup'&&<><label>이름<input required value={name} onChange={e=>setName(e.target.value)} placeholder="홍길동"/></label><label>소속 부서<select required value={department} onChange={e=>setDepartment(e.target.value)}><option value="">부서를 선택하세요</option>{departments.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}</select><small className="field-help">목록에 부서가 없다면 관리자에게 등록을 요청하세요.</small></label></>}
       <label>이메일<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.org"/></label>
       <label>비밀번호<div className="password-field"><input required minLength="6" type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="6자 이상"/><button type="button" onClick={()=>setShowPassword(!showPassword)}>{showPassword?<EyeOff size={17}/>:<Eye size={17}/>}</button></div></label>
       {mode==='login'&&<label className="remember-email"><input type="checkbox" checked={rememberEmail} onChange={e=>setRememberEmail(e.target.checked)}/>이메일 저장</label>}
       {msg&&<div className={`notice auth-status ${msgKind}`} role="status" aria-live="polite">{msgKind==='success'?<CheckCircle2 size={18}/>:msgKind==='error'?<AlertTriangle size={18}/>:<Info size={18}/>}<span>{msg}</span></div>}
       <button className="primary wide auth-submit" disabled={busy}>{busy?<Loader2 className="spin" size={18}/>:mode==='login'?'로그인':'회원가입'}</button>
-      <button type="button" className="text-btn" onClick={()=>{setMode(mode==='login'?'signup':'login');setMsg('');setMsgKind('info')}}>{mode==='login'?'팀장 계정이 없나요? 가입 요청':'이미 가입 요청을 했나요? 로그인'}</button>
+      <button type="button" className="text-btn" onClick={()=>{setMode(mode==='login'?'signup':'login');setMsg('');setMsgKind('info')}}>{mode==='login'?'로그인 계정이 없으신요? 가입 요청':'이미 가입 요청을 했나요? 로그인'}</button>
     </form></div>
   </div>
 }
