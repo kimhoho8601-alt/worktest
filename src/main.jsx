@@ -30,9 +30,28 @@ const DEFAULT_SETTINGS = {
 
 const employeeBlank = { name:'',facility_id:'',department:'',position:'',employment_status:'재직',joined_date:'',manager_id:'',memo:'' }
 
+function scopeEmployeesForProfile(profile,rows){
+  if(!profile)return []
+  if(profile.role==='admin')return rows
+  if(profile.role==='facility_manager')return rows.filter(row=>String(row.facility_id||'')===String(profile.facility_id||''))
+  if(profile.role==='manager')return rows.filter(row=>row.manager_id===profile.id)
+  return []
+}
+function scopeGoalsForProfile(profile,goals,employees){
+  if(profile?.role==='admin')return goals
+  const ids=new Set(employees.map(row=>row.id))
+  return goals.filter(row=>ids.has(row.owner_id))
+}
+function scopeInterviewsForProfile(profile,interviews,employees){
+  if(profile?.role==='admin')return interviews
+  const ids=new Set(employees.map(row=>row.id))
+  if(profile?.role==='manager')return interviews.filter(row=>ids.has(row.employee_id)&&row.manager_id===profile.id)
+  return interviews.filter(row=>ids.has(row.employee_id))
+}
+
 function App(){
   const [session,setSession]=useState(null),[profile,setProfile]=useState(null),[loading,setLoading]=useState(true)
-  const [page,setPage]=useState('dashboard'),[mobile,setMobile]=useState(false),[menuSettings,setMenuSettings]=useState([])
+  const [page,setPage]=useState('dashboard'),[mobile,setMobile]=useState(false),[menuSettings,setMenuSettings]=useState([]),[previewAccounts,setPreviewAccounts]=useState([]),[viewAsId,setViewAsId]=useState('')
   const [isPasswordRecovery,setIsPasswordRecovery]=useState(()=>{
     const search=new URLSearchParams(window.location.search)
     const hash=new URLSearchParams(window.location.hash.replace(/^#/,''))
@@ -52,20 +71,27 @@ function App(){
     })
     return()=>s.subscription.unsubscribe()
   },[])
-  useEffect(()=>{ if(!session){setProfile(null);return} supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data)) },[session])
-  useEffect(()=>{if(!profile?.role){setMenuSettings([]);return}supabase.from('role_menu_settings').select('*').eq('role',profile.role).order('sort_order').then(({data})=>setMenuSettings(data||[]))},[profile?.role])
+  useEffect(()=>{ if(!session){setProfile(null);setPreviewAccounts([]);setViewAsId('');return} supabase.from('profiles').select('*').eq('id',session.user.id).single().then(({data})=>setProfile(data)) },[session])
+  useEffect(()=>{
+    if(profile?.role!=='admin'){setPreviewAccounts([]);setViewAsId('');return}
+    supabase.from('profiles').select('id,name,email,role,account_status,facility_id,department,position').eq('account_status','active').in('role',['manager','facility_manager']).order('name').then(({data})=>setPreviewAccounts(data||[]))
+  },[profile?.id,profile?.role])
+  const previewProfile=viewAsId?previewAccounts.find(row=>row.id===viewAsId)||null:null
+  const effectiveProfile=previewProfile||profile
+  useEffect(()=>{if(!effectiveProfile?.role){setMenuSettings([]);return}supabase.from('role_menu_settings').select('*').eq('role',effectiveProfile.role).order('sort_order').then(({data})=>setMenuSettings(data||[]))},[effectiveProfile?.role])
   if(loading) return <FullLoader/>
   if(!isSupabaseConfigured) return <SetupScreen/>
   if(isPasswordRecovery) return session?<ResetPasswordScreen/>:<FullLoader/>
   if(!session) return <AuthScreen/>
   if(!profile) return <FullLoader/>
   if(profile.account_status!=='active') return <PendingScreen profile={profile}/>
-  const canManage = ['manager','facility_manager','admin'].includes(profile.role)
+  const canManage = ['manager','facility_manager','admin'].includes(effectiveProfile.role)
+  const isAdminPreview=profile.role==='admin'&&Boolean(previewProfile)
   const menuMap=new Map(menuSettings.map(x=>[x.menu_key,x]))
   const visibleMenu = MENU
     .filter(([k])=>{
       const configured=menuMap.get(k)
-      const allowedByRole=(k!=='employees'||canManage)&&(k!=='admin'||profile.role==='admin')
+      const allowedByRole=(k!=='employees'||canManage)&&(k!=='admin'||effectiveProfile.role==='admin')
       return allowedByRole&&(configured?configured.is_visible:true)
     })
     .sort((a,b)=>(menuMap.get(a[0])?.sort_order??MENU.findIndex(x=>x[0]===a[0]))-(menuMap.get(b[0])?.sort_order??MENU.findIndex(x=>x[0]===b[0])))
@@ -76,16 +102,17 @@ function App(){
       <div className="brand"><img className="brand-logo" src="/Logo-black.png" alt="Save the Children"/><div className="brand-system-name">성과·면담관리</div></div>
       <nav>{visibleMenu.map(([k,l,I])=><button key={k} className={activePage===k?'active':''} onClick={()=>{setPage(k);setMobile(false)}}><I size={19}/><span>{l}</span></button>)}</nav>
       <div className="sidebar-spacer"/>
-      <div className="sidebar-user"><div className="avatar">{(profile.name||profile.email||'?')[0]}</div><div><strong>{profile.name||'사용자'}</strong><small>{roleLabel[profile.role]}</small></div><button className="icon-btn" onClick={()=>supabase.auth.signOut()} title="로그아웃"><LogOut size={18}/></button></div>
+      <div className="sidebar-user"><div className="avatar">{(effectiveProfile.name||effectiveProfile.email||'?')[0]}</div><div><strong>{effectiveProfile.name||'사용자'}</strong><small>{isAdminPreview?`미리보기 · ${roleLabel[effectiveProfile.role]}`:roleLabel[effectiveProfile.role]}</small></div><button className="icon-btn" onClick={()=>supabase.auth.signOut()} title="로그아웃"><LogOut size={18}/></button></div>
     </aside>
     <main>
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMobile(!mobile)}><Menu/></button>
         <div className="topbar-title"><h1>{currentLabel}</h1><p>{new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'})}</p></div>
-        <div className="topbar-actions"><button className="icon-btn top-icon" title="알림"><Bell size={19}/></button><div className="profile-chip"><div className="avatar">{(profile.name||profile.email||'?')[0]}</div><div><strong>{profile.name||'사용자'}</strong><small>{roleLabel[profile.role]}</small></div><ChevronDown size={15}/></div></div>
+        <div className="topbar-actions"><button className="icon-btn top-icon" title="알림"><Bell size={19}/></button>{profile.role==='admin'&&<label style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:12,color:'#64748b',whiteSpace:'nowrap'}}>권한 미리보기</span><select value={viewAsId} onChange={e=>{setViewAsId(e.target.value);setPage('dashboard')}} style={{minWidth:180,height:40,border:'1px solid #e2e8f0',borderRadius:12,padding:'0 34px 0 12px',background:'#fff'}}><option value="">관리자 · {profile.name||profile.email}</option>{previewAccounts.map(account=><option key={account.id} value={account.id}>{account.name||account.email} · {roleLabel[account.role]}</option>)}</select></label>}<div className="profile-chip"><div className="avatar">{(effectiveProfile.name||effectiveProfile.email||'?')[0]}</div><div><strong>{effectiveProfile.name||'사용자'}</strong><small>{isAdminPreview?`관리자 미리보기 · ${roleLabel[effectiveProfile.role]}`:roleLabel[effectiveProfile.role]}</small></div><ChevronDown size={15}/></div></div>
       </header>
       <section className="content">
-        {activePage==='dashboard'&&<Dashboard profile={profile} onNavigate={setPage}/>} {activePage==='goals'&&<Goals profile={profile}/>} {activePage==='interviews'&&<Interviews profile={profile}/>} {activePage==='employees'&&canManage&&<Employees profile={profile}/>} {activePage==='admin'&&profile.role==='admin'&&<AdminPage profile={profile}/>} 
+        {isAdminPreview&&<div className="notice" style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,borderColor:'#f59e0b',background:'#fffbeb'}}><Eye size={17}/><div><strong>관리자 권한 미리보기</strong><div style={{fontSize:13,marginTop:2}}>{effectiveProfile.name||effectiveProfile.email} · {roleLabel[effectiveProfile.role]} 화면과 데이터 범위로 확인 중입니다. 실제 로그인 세션은 관리자 계정으로 유지됩니다.</div></div></div>}
+        {activePage==='dashboard'&&<Dashboard key={`dashboard-${effectiveProfile.id}`} profile={effectiveProfile} onNavigate={setPage}/>} {activePage==='goals'&&<Goals key={`goals-${effectiveProfile.id}`} profile={effectiveProfile}/>} {activePage==='interviews'&&<Interviews key={`interviews-${effectiveProfile.id}`} profile={effectiveProfile}/>} {activePage==='employees'&&canManage&&<Employees key={`employees-${effectiveProfile.id}`} profile={effectiveProfile}/>} {activePage==='admin'&&effectiveProfile.role==='admin'&&<AdminPage profile={profile}/>} 
       </section>
     </main>
   </div>
@@ -193,7 +220,7 @@ function Dashboard({profile,onNavigate}){
     if(profile.role==='admin') queries.push(supabase.from('profiles').select('*').order('created_at',{ascending:false}))
     queries.push(supabase.from('app_settings').select('*').eq('id','global').maybeSingle())
     const result=await Promise.all(queries)
-    setGoals(result[0].data||[]);setInterviews(result[1].data||[]);setPeople(result[2].data||[]);setAccounts(profile.role==='admin'?(result[3]?.data||[]):[]);const settingResult=result[profile.role==='admin'?4:3];if(settingResult?.data)setSettings({...DEFAULT_SETTINGS,...settingResult.data})
+    const scopedPeople=scopeEmployeesForProfile(profile,result[2].data||[]);setPeople(scopedPeople);setGoals(scopeGoalsForProfile(profile,result[0].data||[],scopedPeople));setInterviews(scopeInterviewsForProfile(profile,result[1].data||[],scopedPeople));setAccounts(profile.role==='admin'?(result[3]?.data||[]):[]);const settingResult=result[profile.role==='admin'?4:3];if(settingResult?.data)setSettings({...DEFAULT_SETTINGS,...settingResult.data})
   }
   const now=new Date(), week=new Date(Date.now()+Number(settings.goal_due_days||7)*86400000), stale=new Date(Date.now()-Number(settings.goal_stale_days||30)*86400000), ninety=new Date(Date.now()-Number(settings.interview_overdue_days||90)*86400000)
   const monthStart=new Date(now.getFullYear(),now.getMonth(),1)
@@ -268,7 +295,7 @@ function Goals({profile}){
   const [rows,setRows]=useState([]),[people,setPeople]=useState([]),[search,setSearch]=useState(''),[status,setStatus]=useState('전체'),[modal,setModal]=useState(false),[form,setForm]=useState(goalBlank),[editId,setEditId]=useState(null)
   const canManage=['manager','facility_manager','admin'].includes(profile.role)
   useEffect(()=>{load()},[])
-  async function load(){const [a,b]=await Promise.all([supabase.from('goals').select('*').order('created_at',{ascending:false}),supabase.from('employees').select('id,name,department,employment_status,manager_id')]);setRows(a.data||[]);setPeople((b.data||[]).filter(x=>x.employment_status!=='퇴직'))}
+  async function load(){const [a,b]=await Promise.all([supabase.from('goals').select('*').order('created_at',{ascending:false}),supabase.from('employees').select('id,name,department,employment_status,manager_id,facility_id')]);const scopedPeople=scopeEmployeesForProfile(profile,(b.data||[]).filter(x=>x.employment_status!=='퇴직'));setPeople(scopedPeople);setRows(scopeGoalsForProfile(profile,a.data||[],scopedPeople))}
   function open(row){setEditId(row?.id||null);setForm(row?{...row}:{...goalBlank,owner_id:''});setModal(true)}
   async function save(e){e.preventDefault();const payload={...form,progress:Number(form.progress),weight:Number(form.weight),created_by:profile.id,last_progress_at:new Date().toISOString()};const r=editId?await supabase.from('goals').update(payload).eq('id',editId):await supabase.from('goals').insert(payload);if(r.error)alert(r.error.message);else{setModal(false);load()}}
   async function remove(id){if(confirm('이 목표를 삭제할까요?')){const r=await supabase.from('goals').delete().eq('id',id);if(r.error)alert(r.error.message);load()}}
@@ -300,16 +327,15 @@ function Interviews({profile}){
   function openGuide(){setGuidePage(0);setGuideZoom(0);setGuideOpen(true)}
   function changeGuideZoom(delta){setGuideZoom(z=>{const base=z===0?1:z;return Math.max(.7,Math.min(2,Number((base+delta).toFixed(2))))})}
   async function load(){
-    const [a,b]=await Promise.all([supabase.from('interviews').select('*').order('interview_date',{ascending:false}),supabase.from('employees').select('id,name,department,employment_status,manager_id')])
-    const visiblePeople=(b.data||[]).filter(x=>x.employment_status!=='퇴직')
-    const visibleIds=new Set(visiblePeople.map(x=>x.id))
-    setPeople(visiblePeople);setRows((a.data||[]).filter(x=>visibleIds.has(x.employee_id)));sessionStorage.removeItem('dashboardTargetEmployee')
+    const [a,b]=await Promise.all([supabase.from('interviews').select('*').order('interview_date',{ascending:false}),supabase.from('employees').select('id,name,department,employment_status,manager_id,facility_id')])
+    const visiblePeople=scopeEmployeesForProfile(profile,(b.data||[]).filter(x=>x.employment_status!=='퇴직'))
+    setPeople(visiblePeople);setRows(scopeInterviewsForProfile(profile,a.data||[],visiblePeople));sessionStorage.removeItem('dashboardTargetEmployee')
   }
   function exportInterviews(){
     const employeeName=id=>people.find(x=>x.id===id)?.name||''
     downloadCsv(profile.role==='admin'?'전체_면담기록.csv':profile.role==='facility_manager'?'시설_면담기록.csv':'내팀원_면담기록.csv',filteredRows.map(r=>({
       직원명:employeeName(r.employee_id),팀장명:profile.name||profile.email,소속시설:people.find(x=>x.id===r.employee_id)?.department||'',면담일:r.interview_date||'',면담유형:r.interview_type||'',컨디션:r.mood||'',오늘의주제:r.summary||'',최근잘된것:r.strengths||'',막히는것:r.concerns||'',작은실험:r.action_items||'',성장주제:r.employee_commitment||'',리더지원:r.manager_support||'',다음1on1:r.next_date||'',공개범위:'작성자 · 같은 시설 시설장 · 관리자'
-    })))
+    })))}
   }
   function open(row){setEditId(row?.id||null);setForm(row?{...row}:{...interviewBlank,manager_id:profile.id,interview_date:new Date().toISOString().slice(0,10)});setModal(true)}
   async function save(e){e.preventDefault();const payload={...form,manager_id:form.manager_id||profile.id,visibility:'participants'};const r=editId?await supabase.from('interviews').update(payload).eq('id',editId):await supabase.from('interviews').insert(payload);if(r.error)alert(r.error.message);else{setModal(false);load()}}
@@ -345,8 +371,8 @@ function Employees({profile}){
     ]
     if(canAssign) queries.push(supabase.from('profiles').select('*').order('created_at',{ascending:false}))
     const result=await Promise.all(queries)
-    setRows(result[0].data||[]);setFacilities(result[1].data||[]);setDepartments(result[2].data||[]);setPositions(result[3].data||[])
-    if(canAssign)setAccounts(result[4].data||[])
+    setRows(scopeEmployeesForProfile(profile,result[0].data||[]));setFacilities(result[1].data||[]);setDepartments(result[2].data||[]);setPositions(result[3].data||[])
+    if(canAssign){const allAccounts=result[4].data||[];setAccounts(profile.role==='admin'?allAccounts:allAccounts.filter(account=>String(account.facility_id||'')===String(profile.facility_id||'')&&account.account_status==='active'))}
   }
   function open(row){setSelected(row?{...row}:{...employeeBlank,facility_id:profile.facility_id||'',department:profile.department||'',manager_id:canAssign?'':profile.id})}
   async function save(e){e.preventDefault();const {id,...values}=selected;const payload={...values,facility_id:isScopedUser?profile.facility_id:values.facility_id,department:isScopedUser?profile.department:values.department,manager_id:canAssign?(values.manager_id||profile.id):profile.id};const r=id?await supabase.from('employees').update(payload).eq('id',id):await supabase.from('employees').insert(payload);if(r.error)alert(r.error.message);else{setSelected(null);load()}}
@@ -403,8 +429,7 @@ function AdminPage({profile}){
     setBusy(true);setNotice('')
     const {error}=await supabase.functions.invoke('admin-reset-password',{body:{targetUserId:accountEdit.id,newPassword:adminPassword}})
     setBusy(false)
-    if(error){alert(`비밀번호 변경에 실패했습니다.
-${error.message}`);return}
+    if(error){alert(`비밀번호 변경에 실패했습니다.\n${error.message}`);return}
     setAdminPassword('');setAdminPasswordConfirm('')
     setNotice(`${accountEdit.name||accountEdit.email}님의 비밀번호를 변경했습니다.`)
     alert('비밀번호를 변경했습니다.')
@@ -421,21 +446,16 @@ ${error.message}`);return}
   async function deleteAccount(account){
     if(account.id===profile?.id){alert('현재 로그인한 관리자 본인 계정은 삭제할 수 없습니다.');return}
     const label=account.name||account.email
-    if(!confirm(`${label}님의 계정을 완전히 삭제할까요?
-
-테스트 계정처럼 업무 기록이 전혀 연결되지 않은 계정만 삭제됩니다.
-업무 기록이 있는 퇴사·휴직 계정은 삭제되지 않으며, 계정 상태를 '중지'로 변경해 기록을 보존하세요.`))return
+    if(!confirm(`${label}님의 계정을 완전히 삭제할까요?\n\n테스트 계정처럼 업무 기록이 전혀 연결되지 않은 계정만 삭제됩니다.\n업무 기록이 있는 퇴사·휴직 계정은 삭제되지 않으며, 계정 상태를 '중지'로 변경해 기록을 보존하세요.`))return
     setBusy(true);setNotice('')
     const {data,error}=await supabase.functions.invoke('admin-delete-user',{body:{targetUserId:account.id}})
     setBusy(false)
     if(error){
       const message=data?.error||error.message
-      alert(`계정 삭제에 실패했습니다.
-${message}`)
+      alert(`계정 삭제에 실패했습니다.\n${message}`)
       return
     }
-    if(data?.error){alert(`계정 삭제에 실패했습니다.
-${data.error}`);return}
+    if(data?.error){alert(`계정 삭제에 실패했습니다.\n${data.error}`);return}
     if(accountEdit?.id===account.id)setAccountEdit(null)
     setNotice(`${label}님의 계정을 Supabase 인증 계정까지 완전히 삭제했습니다.`)
     load()
