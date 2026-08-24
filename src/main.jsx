@@ -335,7 +335,7 @@ function Interviews({profile}){
     const employeeName=id=>people.find(x=>x.id===id)?.name||''
     downloadCsv(profile.role==='admin'?'전체_면담기록.csv':profile.role==='facility_manager'?'시설_면담기록.csv':'내팀원_면담기록.csv',filteredRows.map(r=>({
       직원명:employeeName(r.employee_id),팀장명:profile.name||profile.email,소속시설:people.find(x=>x.id===r.employee_id)?.department||'',면담일:r.interview_date||'',면담유형:r.interview_type||'',컨디션:r.mood||'',오늘의주제:r.summary||'',최근잘된것:r.strengths||'',막히는것:r.concerns||'',작은실험:r.action_items||'',성장주제:r.employee_commitment||'',리더지원:r.manager_support||'',다음1on1:r.next_date||'',공개범위:'작성자 · 같은 시설 시설장 · 관리자'
-    })))}
+    })))
   }
   function open(row){setEditId(row?.id||null);setForm(row?{...row}:{...interviewBlank,manager_id:profile.id,interview_date:new Date().toISOString().slice(0,10)});setModal(true)}
   async function save(e){e.preventDefault();const payload={...form,manager_id:form.manager_id||profile.id,visibility:'participants'};const r=editId?await supabase.from('interviews').update(payload).eq('id',editId):await supabase.from('interviews').insert(payload);if(r.error)alert(r.error.message);else{setModal(false);load()}}
