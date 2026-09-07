@@ -46,12 +46,6 @@ function findRecordToolbar(){
   return heading?.closest('.toolbar')||null
 }
 function findRecordFilterSelect(){return findRecordToolbar()?.querySelector('.toolbar-actions select')||null}
-function setNativeSelectValue(el,value){
-  if(!el)return
-  const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set
-  setter?.call(el,value)
-  el.dispatchEvent(new Event('change',{bubbles:true}))
-}
 
 function InterviewCalendarBridge(){
   const [profile,setProfile]=useState(null)
@@ -151,11 +145,6 @@ function InterviewCalendarBridge(){
   const calendarDays=daysForCalendar(month)
 
   function employeeName(id){return people.find(x=>x.id===id)?.name||'직원'}
-  function changeEmployeeFilter(value){
-    setEmployeeFilter(value)
-    const source=findRecordFilterSelect()
-    if(source&&source.value!==value)setNativeSelectValue(source,value)
-  }
   function openEdit(row){
     setSuggestionSourceId(null);setEditId(row.id);setForm({employee_id:row.employee_id,scheduled_date:row.scheduled_date,scheduled_time:(row.scheduled_time||'').slice(0,5),interview_type:row.interview_type||'정기 1:1',topic:row.topic||'',status:row.status||'예정'});setModal(true)
   }
@@ -210,9 +199,6 @@ function InterviewCalendarBridge(){
         <span><CheckCircle2 size={15}/> 완료 <b>{monthCompleted}</b></span>
         <span><MessageSquareText size={15}/> 기록 <b>{monthRecords}</b></span>
       </div>
-      <div className="ic-toolbar-actions">
-        <select value={employeeFilter} onChange={e=>changeEmployeeFilter(e.target.value)}><option value="전체">전체 직원 · {interviews.length}건</option>{people.map(p=><option key={p.id} value={p.id}>{p.name} · {interviews.filter(r=>r.employee_id===p.id).length}건</option>)}</select>
-      </div>
     </div>
     {notice&&<div className="ic-notice"><Sparkles size={15}/><span>{notice}</span><button onClick={()=>setNotice('')}><X size={14}/></button></div>}
     <div className="ic-layout">
@@ -266,7 +252,7 @@ function ensureCalendarMount(){
   const toolbar=findRecordToolbar()
   if(!toolbar||!document.body.contains(toolbar))return
   const sourceFilter=toolbar.querySelector('.toolbar-actions select')
-  if(sourceFilter){sourceFilter.style.display='none';sourceFilter.setAttribute('aria-hidden','true')}
+  if(sourceFilter){sourceFilter.style.display='';sourceFilter.removeAttribute('aria-hidden')}
   let mount=toolbar.parentElement?.querySelector(':scope > .interview-calendar-extension')
   if(!mount){mount=document.createElement('div');mount.className='interview-calendar-extension';toolbar.before(mount)}
   if(!mounted.has(mount)){const root=createRoot(mount);mounted.set(mount,root);root.render(<InterviewCalendarBridge/>)}
