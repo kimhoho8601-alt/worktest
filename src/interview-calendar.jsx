@@ -52,6 +52,7 @@ function InterviewCalendarBridge(){
   const [employeeFilter,setEmployeeFilter]=useState('전체')
   const [modal,setModal]=useState(false)
   const [editId,setEditId]=useState(null)
+  const [suggestionSourceId,setSuggestionSourceId]=useState(null)
   const [form,setForm]=useState(SCHEDULE_BLANK)
   const [busy,setBusy]=useState(false)
   const [notice,setNotice]=useState('')
@@ -130,16 +131,25 @@ function InterviewCalendarBridge(){
 
   function employeeName(id){return people.find(x=>x.id===id)?.name||'직원'}
   function openNew(date=selectedDate,employeeId=''){
-    setEditId(null);setForm({...SCHEDULE_BLANK,scheduled_date:date||isoDate(new Date()),employee_id:employeeId});setModal(true)
+    setEditId(null);setSuggestionSourceId(null);setForm({...SCHEDULE_BLANK,scheduled_date:date||isoDate(new Date()),employee_id:employeeId});setModal(true)
   }
-  function openEdit(row){setEditId(row.id);setForm({employee_id:row.employee_id,scheduled_date:row.scheduled_date,scheduled_time:(row.scheduled_time||'').slice(0,5),interview_type:row.interview_type||'정기 1:1',topic:row.topic||'',status:row.status||'예정'});setModal(true)}
+  function openEdit(row){
+    setSuggestionSourceId(null);setEditId(row.id);setForm({employee_id:row.employee_id,scheduled_date:row.scheduled_date,scheduled_time:(row.scheduled_time||'').slice(0,5),interview_type:row.interview_type||'정기 1:1',topic:row.topic||'',status:row.status||'예정'});setModal(true)
+  }
+  function openSuggestionEdit(item){
+    setEditId(null);setSuggestionSourceId(item.source?.id||null);setForm({employee_id:item.employee_id,scheduled_date:item.scheduled_date,scheduled_time:item.scheduled_time||'10:00',interview_type:item.interview_type||'정기 1:1',topic:item.topic||'',status:'예정'});setModal(true)
+  }
   async function saveSchedule(e){
     e.preventDefault();if(!profile)return;setBusy(true)
     const payload={...form,manager_id:profile.id,scheduled_time:form.scheduled_time||null}
     const r=editId?await supabase.from('interview_schedules').update(payload).eq('id',editId):await supabase.from('interview_schedules').insert(payload)
-    setBusy(false)
-    if(r.error){alert(r.error.message);return}
-    setModal(false);setSelectedDate(form.scheduled_date);setMonth(new Date(`${form.scheduled_date}T00:00:00`));loadAll()
+    if(r.error){setBusy(false);alert(r.error.message);return}
+    if(suggestionSourceId){
+      const sourceUpdate=await supabase.from('interviews').update({next_date:form.scheduled_date}).eq('id',suggestionSourceId)
+      if(sourceUpdate.error){setBusy(false);alert(sourceUpdate.error.message);return}
+      setNotice('제안 일정을 수정해 확정했습니다.')
+    }
+    setBusy(false);setModal(false);setEditId(null);setSuggestionSourceId(null);setSelectedDate(form.scheduled_date);setMonth(new Date(`${form.scheduled_date}T00:00:00`));loadAll()
   }
   async function removeSchedule(id){if(!confirm('이 면담 일정을 삭제할까요?'))return;const r=await supabase.from('interview_schedules').delete().eq('id',id);if(r.error)alert(r.error.message);else loadAll()}
   async function setStatus(row,status){const r=await supabase.from('interview_schedules').update({status}).eq('id',row.id);if(r.error)alert(r.error.message);else loadAll()}
@@ -208,7 +218,7 @@ function InterviewCalendarBridge(){
             {item.scheduled_time&&<div className="ic-time"><Clock3 size={14}/>{item.scheduled_time.slice(0,5)}</div>}
             <p>{item.kind==='record'?(item.summary||'면담 기록'):item.topic||'면담 주제가 아직 입력되지 않았습니다.'}</p>
             <div className="ic-agenda-actions">
-              {item.kind==='suggestion'?<button className="ic-soft" onClick={()=>confirmSuggestion(item)}>일정으로 확정</button>:item.kind==='record'?null:<>
+              {item.kind==='suggestion'?<><button className="ic-soft" onClick={()=>confirmSuggestion(item)}>일정으로 확정</button><button className="ic-icon" onClick={()=>openSuggestionEdit(item)} title="제안 일정 수정"><Pencil size={14}/></button></>:item.kind==='record'?null:<>
                 {item.status!=='완료'&&<button className="ic-record" onClick={()=>openRecord(item)}><MessageSquareText size={14}/> 기록 작성</button>}
                 {item.status==='예정'&&<button className="ic-soft" onClick={()=>setStatus(item,'미실시')}>미실시</button>}
                 <button className="ic-icon" onClick={()=>openEdit(item)} title="수정"><Pencil size={14}/></button><button className="ic-icon danger" onClick={()=>removeSchedule(item.id)} title="삭제"><Trash2 size={14}/></button>
@@ -218,13 +228,13 @@ function InterviewCalendarBridge(){
         }):<div className="ic-empty"><CalendarDays size={26}/><strong>등록된 일정이 없습니다.</strong><span>날짜를 더블클릭하거나 ‘면담 일정’을 눌러 추가하세요.</span></div>}</div>
       </div>
     </div>
-    {modal&&<div className="ic-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="ic-modal"><div className="ic-modal-head"><div><span>SCK 1:1 SCHEDULE</span><h3>{editId?'면담 일정 수정':'면담 일정 등록'}</h3></div><button onClick={()=>setModal(false)}><X size={20}/></button></div><form onSubmit={saveSchedule} className="ic-form">
+    {modal&&<div className="ic-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="ic-modal"><div className="ic-modal-head"><div><span>SCK 1:1 SCHEDULE</span><h3>{editId?'면담 일정 수정':suggestionSourceId?'제안 일정 수정 · 확정':'면담 일정 등록'}</h3></div><button onClick={()=>setModal(false)}><X size={20}/></button></div><form onSubmit={saveSchedule} className="ic-form">
       <label>팀원<select required value={form.employee_id} onChange={e=>setForm({...form,employee_id:e.target.value})}><option value="">선택</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}{p.position?` · ${p.position}`:''}</option>)}</select></label>
       <div className="ic-form-row"><label>날짜<input required type="date" value={form.scheduled_date} onChange={e=>setForm({...form,scheduled_date:e.target.value})}/></label><label>시간<input type="time" value={form.scheduled_time||''} onChange={e=>setForm({...form,scheduled_time:e.target.value})}/></label></div>
       <label>면담 유형<select value={form.interview_type} onChange={e=>setForm({...form,interview_type:e.target.value})}><option>정기 1:1</option><option>성장 코칭</option><option>이슈 체크인</option><option>커리어 대화</option></select></label>
       <label>미리 정할 주제<textarea value={form.topic} onChange={e=>setForm({...form,topic:e.target.value})} placeholder="예: 상반기 목표 점검, 최근 업무 부담, 커리어 방향"/></label>
       {editId&&<label>상태<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option>예정</option><option>완료</option><option>취소</option><option>미실시</option></select></label>}
-      <div className="ic-form-actions"><button type="button" className="ic-secondary" onClick={()=>setModal(false)}>취소</button><button className="ic-primary" disabled={busy}>{busy?'저장 중...':'저장'}</button></div>
+      <div className="ic-form-actions"><button type="button" className="ic-secondary" onClick={()=>setModal(false)}>취소</button><button className="ic-primary" disabled={busy}>{busy?'저장 중...':suggestionSourceId?'수정하여 확정':'저장'}</button></div>
     </form></div></div>}
   </section>
 }
