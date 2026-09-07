@@ -254,7 +254,7 @@ function ensureCalendarMount(){
   const sourceFilter=toolbar.querySelector('.toolbar-actions select')
   if(sourceFilter){sourceFilter.style.display='';sourceFilter.removeAttribute('aria-hidden')}
   let mount=toolbar.parentElement?.querySelector(':scope > .interview-calendar-extension')
-  if(!mount){mount=document.createElement('div');mount.className='interview-calendar-extension';toolbar.before(mount)}
+  if(!mount){mount=document.createElement('div');mount.className='interview-calendar-extension';toolbar.after(mount)}
   if(!mounted.has(mount)){const root=createRoot(mount);mounted.set(mount,root);root.render(<InterviewCalendarBridge/>)}
 }
 
