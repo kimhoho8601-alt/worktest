@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  CalendarDays, ChevronLeft, ChevronRight, Plus, Clock3, CheckCircle2,
+  CalendarDays, ChevronLeft, ChevronRight, Clock3, CheckCircle2,
   Pencil, Trash2, MessageSquareText, X, Sparkles
 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
@@ -41,6 +41,17 @@ function scopedByEmployees(profile,rows,employees){
   const ids=new Set(employees.map(x=>x.id))
   return rows.filter(r=>ids.has(r.employee_id)&&(profile?.role!=='manager'||r.manager_id===profile.id))
 }
+function findRecordToolbar(){
+  const heading=[...document.querySelectorAll('.page-subtitle')].find(el=>el.textContent.includes('면담 기록'))
+  return heading?.closest('.toolbar')||null
+}
+function findRecordFilterSelect(){return findRecordToolbar()?.querySelector('.toolbar-actions select')||null}
+function setNativeSelectValue(el,value){
+  if(!el)return
+  const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value')?.set
+  setter?.call(el,value)
+  el.dispatchEvent(new Event('change',{bubbles:true}))
+}
 
 function InterviewCalendarBridge(){
   const [profile,setProfile]=useState(null)
@@ -66,6 +77,14 @@ function InterviewCalendarBridge(){
     select.addEventListener('change',handler)
     return()=>select.removeEventListener('change',handler)
   },[])
+  useEffect(()=>{
+    const source=findRecordFilterSelect()
+    if(!source)return
+    const sync=()=>setEmployeeFilter(source.value||'전체')
+    sync()
+    source.addEventListener('change',sync)
+    return()=>source.removeEventListener('change',sync)
+  },[profile?.id,people.length,interviews.length])
   useEffect(()=>{
     if(!pendingLink)return
     let attempts=0
@@ -105,6 +124,8 @@ function InterviewCalendarBridge(){
     setProfile(effective);setPeople(scopedPeople)
     setInterviews(scopedByEmployees(effective,i.data||[],scopedPeople))
     setSchedules(scopedByEmployees(effective,s.data||[],scopedPeople))
+    const source=findRecordFilterSelect()
+    if(source?.value)setEmployeeFilter(source.value)
   }
 
   const filteredPeople=useMemo(()=>employeeFilter==='전체'?people:people.filter(x=>x.id===employeeFilter),[people,employeeFilter])
@@ -130,8 +151,10 @@ function InterviewCalendarBridge(){
   const calendarDays=daysForCalendar(month)
 
   function employeeName(id){return people.find(x=>x.id===id)?.name||'직원'}
-  function openNew(date=selectedDate,employeeId=''){
-    setEditId(null);setSuggestionSourceId(null);setForm({...SCHEDULE_BLANK,scheduled_date:date||isoDate(new Date()),employee_id:employeeId});setModal(true)
+  function changeEmployeeFilter(value){
+    setEmployeeFilter(value)
+    const source=findRecordFilterSelect()
+    if(source&&source.value!==value)setNativeSelectValue(source,value)
   }
   function openEdit(row){
     setSuggestionSourceId(null);setEditId(row.id);setForm({employee_id:row.employee_id,scheduled_date:row.scheduled_date,scheduled_time:(row.scheduled_time||'').slice(0,5),interview_type:row.interview_type||'정기 1:1',topic:row.topic||'',status:row.status||'예정'});setModal(true)
@@ -160,7 +183,7 @@ function InterviewCalendarBridge(){
   }
   function openRecord(row){
     const trigger=[...document.querySelectorAll('.toolbar-actions button')].find(b=>b.textContent.includes('1on1 코칭'))
-    if(!trigger){setNotice('상단의 1on1 코칭 버튼에서 기록을 작성해 주세요.');return}
+    if(!trigger){setNotice('아래 면담 기록 영역의 1on1 코칭 버튼에서 기록을 작성해 주세요.');return}
     trigger.click();setPendingLink({...row,startedAt:Date.now()});setNotice('면담 기록 화면을 열었습니다. 저장하면 일정이 자동으로 완료 처리됩니다.')
     setTimeout(()=>prefillExistingForm(row),80)
   }
@@ -188,8 +211,7 @@ function InterviewCalendarBridge(){
         <span><MessageSquareText size={15}/> 기록 <b>{monthRecords}</b></span>
       </div>
       <div className="ic-toolbar-actions">
-        <select value={employeeFilter} onChange={e=>setEmployeeFilter(e.target.value)}><option value="전체">전체 팀원</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <button className="ic-primary" onClick={()=>openNew()}><Plus size={16}/> 면담 일정</button>
+        <select value={employeeFilter} onChange={e=>changeEmployeeFilter(e.target.value)}><option value="전체">전체 직원 · {interviews.length}건</option>{people.map(p=><option key={p.id} value={p.id}>{p.name} · {interviews.filter(r=>r.employee_id===p.id).length}건</option>)}</select>
       </div>
     </div>
     {notice&&<div className="ic-notice"><Sparkles size={15}/><span>{notice}</span><button onClick={()=>setNotice('')}><X size={14}/></button></div>}
@@ -202,7 +224,7 @@ function InterviewCalendarBridge(){
         <div className="ic-weekdays">{['일','월','화','수','목','금','토'].map(d=><span key={d}>{d}</span>)}</div>
         <div className="ic-calendar-grid">{calendarDays.map(day=>{
           const key=isoDate(day),dayEvents=events.filter(e=>e.scheduled_date===key),outside=!sameMonth(day,month),today=key===isoDate(new Date()),selected=key===selectedDate
-          return <button key={key} className={`ic-day ${outside?'outside':''} ${today?'is-today':''} ${selected?'selected':''}`} onClick={()=>setSelectedDate(key)} onDoubleClick={()=>openNew(key)}>
+          return <button key={key} className={`ic-day ${outside?'outside':''} ${today?'is-today':''} ${selected?'selected':''}`} onClick={()=>setSelectedDate(key)}>
             <span className="ic-day-number">{day.getDate()}</span>
             <div className="ic-day-events">{dayEvents.slice(0,3).map(ev=><span key={ev.id} className={`ic-event ${toneFor(ev.status,ev.kind)}`}><i/>{ev.scheduled_time?`${ev.scheduled_time.slice(0,5)} `:''}{employeeName(ev.employee_id)}</span>)}{dayEvents.length>3&&<span className="ic-more">+{dayEvents.length-3}건</span>}</div>
           </button>
@@ -210,7 +232,7 @@ function InterviewCalendarBridge(){
         <div className="ic-legend"><span><i className="scheduled"/>예정</span><span><i className="done"/>완료</span><span><i className="record"/>면담 기록</span><span><i className="suggestion"/>다음 1:1 제안</span></div>
       </div>
       <div className="ic-panel ic-agenda-panel">
-        <div className="ic-panel-head"><div><h3>{new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'})}</h3><p>선택한 날짜의 일정과 기록</p></div><button className="ic-icon-add" onClick={()=>openNew(selectedDate)} title="일정 추가"><Plus size={17}/></button></div>
+        <div className="ic-panel-head"><div><h3>{new Date(`${selectedDate}T00:00:00`).toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'})}</h3><p>선택한 날짜의 일정과 기록</p></div></div>
         <div className="ic-agenda-list">{selectedEvents.length?selectedEvents.map(item=>{
           const tone=toneFor(item.status,item.kind)
           return <article key={`${item.kind}-${item.id}`} className={`ic-agenda-card ${tone}`}>
@@ -225,7 +247,7 @@ function InterviewCalendarBridge(){
               </>}
             </div>
           </article>
-        }):<div className="ic-empty"><CalendarDays size={26}/><strong>등록된 일정이 없습니다.</strong><span>날짜를 더블클릭하거나 ‘면담 일정’을 눌러 추가하세요.</span></div>}</div>
+        }):<div className="ic-empty"><CalendarDays size={26}/><strong>등록된 일정이 없습니다.</strong><span>1on1 코칭에서 다음 면담일을 정하면 캘린더에 자동으로 표시됩니다.</span></div>}</div>
       </div>
     </div>
     {modal&&<div className="ic-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setModal(false)}}><div className="ic-modal"><div className="ic-modal-head"><div><span>SCK 1:1 SCHEDULE</span><h3>{editId?'면담 일정 수정':suggestionSourceId?'제안 일정 수정 · 확정':'면담 일정 등록'}</h3></div><button onClick={()=>setModal(false)}><X size={20}/></button></div><form onSubmit={saveSchedule} className="ic-form">
@@ -241,11 +263,12 @@ function InterviewCalendarBridge(){
 
 const mounted=new WeakMap()
 function ensureCalendarMount(){
-  const heading=[...document.querySelectorAll('.page-subtitle')].find(el=>el.textContent.includes('면담 기록'))
-  const toolbar=heading?.closest('.toolbar')
+  const toolbar=findRecordToolbar()
   if(!toolbar||!document.body.contains(toolbar))return
+  const sourceFilter=toolbar.querySelector('.toolbar-actions select')
+  if(sourceFilter){sourceFilter.style.display='none';sourceFilter.setAttribute('aria-hidden','true')}
   let mount=toolbar.parentElement?.querySelector(':scope > .interview-calendar-extension')
-  if(!mount){mount=document.createElement('div');mount.className='interview-calendar-extension';toolbar.after(mount)}
+  if(!mount){mount=document.createElement('div');mount.className='interview-calendar-extension';toolbar.before(mount)}
   if(!mounted.has(mount)){const root=createRoot(mount);mounted.set(mount,root);root.render(<InterviewCalendarBridge/>)}
 }
 
